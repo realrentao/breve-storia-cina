@@ -1,0 +1,329 @@
+/* ===== Il Piccolo Principe · 意中双语朗读阅读器 ===== */
+:root{
+  --bg:#f7f5f0;
+  --paper:#fffdf9;
+  --ink:#23201b;
+  --ink-soft:#5c564c;
+  --ink-faint:#8d8577;
+  --line:#e5e0d5;
+  --line-soft:#efebe2;
+  --accent:#b8860b;          /* 小王子的金 */
+  --accent-soft:#f5ead0;
+  --accent-deep:#8a6508;
+  --blue:#2f6f9f;            /* 中文译文 */
+  --blue-soft:#eaf2f8;
+  --active:#fff4d1;
+  --sidebar:#f1ece1;
+  --shadow:0 1px 3px rgba(60,50,30,.08),0 8px 24px rgba(60,50,30,.06);
+  --fs:19px;                  /* 由字号按钮控制 */
+  --radius:10px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"Georgia","Noto Serif","Source Han Serif SC","Songti SC","SimSun",serif;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select{font-family:inherit}
+
+#app{display:flex;height:100vh;overflow:hidden}
+
+/* ================= 侧边栏 ================= */
+#sidebar{
+  width:246px;flex:0 0 246px;
+  background:var(--sidebar);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;
+  transition:margin-left .22s ease;
+}
+#sidebar.hidden{margin-left:-246px}
+.side-head{padding:20px 18px 14px;border-bottom:1px solid var(--line)}
+.book-title{
+  font-size:20px;font-weight:700;letter-spacing:.2px;color:var(--accent-deep);
+  line-height:1.25;
+}
+.book-sub{font-size:12.5px;color:var(--ink-soft);margin-top:4px;letter-spacing:.5px}
+.book-author{font-size:11.5px;color:var(--ink-faint);margin-top:8px;line-height:1.5}
+
+#chapterNav{flex:1;overflow-y:auto;padding:8px 8px 16px}
+#chapterNav a{
+  display:flex;align-items:baseline;gap:8px;
+  padding:7px 11px;margin:1px 0;border-radius:7px;
+  color:var(--ink-soft);text-decoration:none;font-size:13.5px;line-height:1.35;
+  cursor:pointer;
+}
+#chapterNav a:hover{background:#e7e0d2;color:var(--ink)}
+#chapterNav a.on{background:var(--accent);color:#fff;font-weight:600;box-shadow:var(--shadow)}
+#chapterNav a.on .cn-zh{color:#fdf6e3}
+#chapterNav a .cn-it{flex:1;font-variant:small-caps}
+#chapterNav a .cn-zh{font-size:11.5px;color:var(--ink-faint)}
+.side-foot{
+  padding:10px 16px 14px;border-top:1px solid var(--line);
+  font-size:11px;color:var(--ink-faint);line-height:1.6;
+}
+.side-foot .sf-hr{border:0;border-top:1px dashed var(--line);margin:8px 0 6px}
+.side-foot b{color:var(--accent-deep)}
+
+/* ================= 主体 ================= */
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* --- 工具栏 --- */
+#toolbar{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:9px 18px;background:var(--paper);
+  border-bottom:1px solid var(--line);box-shadow:0 1px 2px rgba(60,50,30,.04);
+  z-index:5;
+}
+.tb-group{display:flex;align-items:center;gap:7px}
+.tb-spacer{flex:1}
+.tb-label{font-size:11.5px;color:var(--ink-faint);letter-spacing:.5px;white-space:nowrap}
+.tb-progress{font-size:11.5px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+
+.icon-btn{
+  background:#fff;border:1px solid var(--line);color:var(--ink-soft);
+  border-radius:7px;padding:5px 9px;cursor:pointer;font-size:14px;line-height:1;
+}
+.icon-btn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep)}
+.icon-btn.sm{font-size:11.5px;padding:5px 8px}
+
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{
+  border:0;background:transparent;padding:6px 11px;cursor:pointer;
+  font-size:12.5px;color:var(--ink-soft);border-right:1px solid var(--line-soft);
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--accent-soft)}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+
+.switch{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;user-select:none}
+.switch input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+
+/* --- 阅读区 --- */
+#reader{flex:1;overflow-y:auto;scroll-behavior:smooth}
+#content{
+  max-width:960px;margin:0 auto;padding:34px 30px 20px;
+}
+
+.chapter-head{margin:0 0 30px;padding-bottom:16px;border-bottom:2px solid var(--accent-soft)}
+.chapter-head .ch-it{
+  font-size:31px;font-weight:700;color:var(--accent-deep);margin:0;
+  letter-spacing:.5px;line-height:1.2;
+}
+.chapter-head .ch-zh{font-size:15px;color:var(--ink-faint);margin-top:7px;letter-spacing:1px}
+
+/* 圣埃克苏佩里原版插画 — 复用 russian 站资源，无黑底 */
+.illust{
+  margin:20px auto;text-align:center;display:block;max-width:100%;
+  background:transparent;
+  border-radius:8px;padding:4px;position:relative;
+  box-shadow:none;
+}
+.illust img{
+  max-width:100%;max-height:560px;height:auto;display:block;margin:0 auto;
+  border-radius:6px;object-fit:contain;
+  transition:transform .3s ease;
+}
+.illust:hover img{transform:scale(1.02)}
+.illust-cap{
+  font-size:11px;color:var(--ink-faint);margin-top:8px;letter-spacing:2px;
+  font-style:italic;opacity:.8;
+}
+.illust-header{
+  margin:24px auto 28px;max-width:520px;
+  background:transparent;
+  border:none;
+}
+.illust-header img{max-height:480px}
+.illust-inline{
+  margin:16px auto;max-width:480px;
+  background:transparent;
+  border:none;
+}
+.illust-inline img{max-height:380px}
+.illust-inline::after{
+  content:"";display:block;clear:both;
+}
+
+/* 段落卡片 */
+.para{
+  background:var(--paper);border:1px solid var(--line-soft);
+  border-radius:var(--radius);padding:16px 18px 14px 18px;
+  margin:0 0 16px;position:relative;box-shadow:0 1px 2px rgba(60,50,30,.03);
+}
+.para.playing{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.para-bar{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
+  padding-bottom:8px;border-bottom:1px dashed var(--line);
+}
+.para-idx{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.para-play{
+  background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-deep);
+  border-radius:20px;padding:3px 12px;font-size:11.5px;cursor:pointer;white-space:nowrap;
+}
+.para-play:hover{background:var(--accent);color:#fff}
+.para-noaudio{font-size:11px;color:#c05a2b}
+
+/* 句对 */
+.sent{
+  padding:5px 8px;border-radius:7px;margin:1px 0;cursor:pointer;
+  transition:background .12s;position:relative;
+}
+.sent:hover{background:#faf4e4}
+.sent.active{background:var(--active);box-shadow:inset 3px 0 0 var(--accent)}
+.sent.no-audio{cursor:default}
+
+/* 单句点读中的句子 */
+.sent.solo{
+  background:var(--active);
+  box-shadow:inset 3px 0 0 var(--accent),0 0 0 2px var(--accent-soft);
+}
+.sent.solo::before{
+  content:"单句";position:absolute;left:2px;top:-9px;z-index:2;
+  background:var(--accent);color:#fff;font-size:9px;font-family:system-ui,sans-serif;
+  padding:1px 6px;border-radius:8px;letter-spacing:.5px;line-height:1.5;
+}
+
+/* 句级操作按钮（悬停浮现） */
+.sent-ops{
+  position:absolute;top:50%;right:2px;transform:translateY(-50%);
+  display:flex;gap:5px;align-items:center;z-index:3;
+  opacity:0;pointer-events:none;transition:opacity .12s;
+  padding:4px 2px 4px 26px;border-radius:9px;
+  background:linear-gradient(90deg,rgba(250,244,228,0) 0,#faf4e4 30%);
+}
+.sent:hover .sent-ops,.sent.solo .sent-ops{opacity:1;pointer-events:auto}
+.sent.active .sent-ops,.sent.solo .sent-ops{
+  background:linear-gradient(90deg,rgba(255,244,209,0) 0,var(--active) 30%);
+}
+.s-btn{
+  background:var(--accent);color:#fff;border:1px solid var(--accent);
+  border-radius:13px;padding:3px 10px;cursor:pointer;white-space:nowrap;
+  font-size:10.5px;line-height:1.5;font-family:system-ui,"Microsoft YaHei",sans-serif;
+  box-shadow:0 1px 3px rgba(60,50,30,.18);
+}
+.s-btn:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.s-btn.ghost{background:#fff;color:var(--accent-deep)}
+.s-btn.ghost:hover{background:var(--accent-soft);color:var(--accent-deep)}
+
+.it-line{
+  font-size:var(--fs);line-height:1.95;color:var(--ink);
+  letter-spacing:.1px;
+}
+.zh-line{
+  font-size:calc(var(--fs) * .82);line-height:1.75;color:var(--blue);
+  margin-top:2px;font-family:"Source Han Serif SC","Songti SC","Microsoft YaHei",sans-serif;
+}
+.zh-line:empty::before{content:"（待译）";color:#c9c2b4;font-style:italic}
+
+/* 词 + 音标 */
+.tok{display:inline-flex;flex-direction:column;align-items:center;vertical-align:baseline}
+.tok .wd{white-space:pre}
+.tok .ph{
+  font-family:"Charis SIL","Doulos SIL","Gentium Plus","Segoe UI",system-ui,sans-serif;
+  font-size:calc(var(--fs) * .53);color:var(--accent-deep);
+  line-height:1.25;letter-spacing:0;white-space:nowrap;opacity:.88;margin-top:-1px;
+}
+body.no-ipa .tok{display:inline}
+body.no-ipa .tok .ph{display:none}
+body.no-ipa .it-line{line-height:1.85}
+
+/* 显示模式 */
+body.mode-it .zh-line{display:none}
+body.mode-zh .it-line{display:none}
+body.mode-zh .tok .ph{display:none}
+body.mode-col .sent{display:flex;gap:18px;align-items:flex-start}
+body.mode-col .it-line{flex:1 1 55%;min-width:0}
+body.mode-col .zh-line{flex:1 1 45%;min-width:0;margin-top:0;padding-left:16px;border-left:1px solid var(--line-soft)}
+
+/* 章节页脚 */
+#chapterFoot{
+  max-width:960px;margin:0 auto;padding:10px 30px 46px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  font-size:12.5px;color:var(--ink-faint);
+}
+.nav-btn{
+  background:#fff;border:1px solid var(--line);border-radius:8px;
+  padding:8px 16px;cursor:pointer;color:var(--ink-soft);font-size:13px;
+}
+.nav-btn:hover:not(:disabled){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep)}
+.nav-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ================= 播放器 ================= */
+#player{
+  display:flex;align-items:center;gap:18px;
+  padding:10px 20px;background:var(--paper);
+  border-top:1px solid var(--line);
+  box-shadow:0 -2px 10px rgba(60,50,30,.05);
+  flex-wrap:wrap;
+}
+.play-btn{
+  width:42px;height:42px;flex:0 0 42px;border-radius:50%;
+  background:var(--accent);color:#fff;border:0;cursor:pointer;
+  font-size:16px;display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--shadow);
+}
+.play-btn:hover{background:var(--accent-deep)}
+
+/* 单句点读控件组 */
+.pl-sent{display:flex;align-items:center;gap:4px}
+.pl-sent .icon-btn{padding:6px 9px}
+#btnRepeat{font-size:11px;white-space:nowrap}
+
+.pl-now{min-width:150px;max-width:240px}
+.pl-title{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-sub{font-size:11px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+
+.pl-seek{flex:1;min-width:200px;display:flex;align-items:center;gap:9px}
+.pl-seek input[type=range]{flex:1;min-width:80px}
+.time{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums;min-width:32px}
+
+.pl-speed{display:flex;align-items:center;gap:8px}
+.pl-speed input[type=range]{width:130px}
+#rateVal{
+  font-size:12px;color:var(--accent-deep);font-variant-numeric:tabular-nums;
+  min-width:48px;text-align:right;font-weight:600;
+}
+
+input[type=range]{
+  -webkit-appearance:none;appearance:none;height:4px;border-radius:3px;
+  background:var(--line);outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--accent);
+  border:2px solid #fff;cursor:pointer;
+}
+
+/* ================= 响应式 ================= */
+#overlay{
+  display:none;position:fixed;inset:0;background:rgba(35,30,25,.35);z-index:8;
+}
+#overlay.on{display:block}
+
+@media (max-width:900px){
+  #sidebar{position:fixed;z-index:9;height:100vh;box-shadow:var(--shadow)}
+  #sidebar.hidden{margin-left:-246px}
+  #content,#chapterFoot{padding-left:18px;padding-right:18px}
+  .pl-now{display:none}
+  #toolbar{gap:10px;padding:8px 12px}
+  body.mode-col .sent{flex-direction:column;gap:2px}
+  body.mode-col .zh-line{padding-left:0;border-left:0}
+  .illust{margin:16px 0;padding:4px;border-radius:8px}
+  .illust-header img,.illust-inline img{max-height:300px}
+
+  /* 触屏无 hover：只在当前句下方展开操作按钮 */
+  .sent-ops{
+    position:static;transform:none;background:none;padding:0;
+    justify-content:flex-end;height:0;overflow:hidden;margin-top:0;
+  }
+  .sent.active .sent-ops,.sent.solo .sent-ops{
+    opacity:1;pointer-events:auto;height:auto;overflow:visible;margin-top:6px;
+  }
+  .s-btn{font-size:11.5px;padding:5px 13px}
+}

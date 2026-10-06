@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breve storia della Cina · 中国简史 — 意中双语朗读阅读器</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ 侧边栏：章节导航 ============ -->
+  <aside id="sidebar">
+    <div class="side-head">
+      <div class="book-title">Breve storia della Cina</div>
+      <div class="book-sub">中国简史 · 意中双语朗读</div>
+      <div class="book-author" id="bookAuthor"></div>
+    </div>
+    <nav id="chapterNav" aria-label="章节导航"></nav>
+    <div class="side-foot" id="sideStats"></div>
+  </aside>
+
+  <!-- ============ 主体 ============ -->
+  <main id="main">
+
+    <!-- 工具栏 -->
+    <header id="toolbar">
+      <button id="btnMenu" class="icon-btn" title="章节目录" aria-label="章节目录">☰</button>
+      <a class="icon-btn" href="https://realrentao.github.io/little-prince-ru/" title="返回语言选择 / All languages" style="display:inline-flex;align-items:center;gap:5px;text-decoration:none;white-space:nowrap">🌐 全部语言</a>
+
+
+      <div class="tb-group">
+        <span class="tb-label">显示</span>
+        <div class="seg" id="modeSeg" role="group" aria-label="显示模式">
+          <button data-mode="pair"  class="on">逐句对照</button>
+          <button data-mode="col">双栏</button>
+          <button data-mode="it">仅意语</button>
+          <button data-mode="zh">仅中文</button>
+        </div>
+      </div>
+
+      <div class="tb-group">
+        <label class="switch">
+          <input type="checkbox" id="chkIpa" checked>
+          <span>音标</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="chkFollow" checked>
+          <span>自动滚动</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="chkAuto" checked>
+          <span>连续播放</span>
+        </label>
+        <label class="switch" title="单句点读时反复朗读同一句，适合跟读">
+          <input type="checkbox" id="chkLoop">
+          <span>单句循环</span>
+        </label>
+      </div>
+
+      <div class="tb-group">
+        <span class="tb-label">字号</span>
+        <button class="icon-btn sm" id="btnFontDn" title="减小字号">A−</button>
+        <button class="icon-btn sm" id="btnFontUp" title="增大字号">A+</button>
+      </div>
+
+      <div class="tb-spacer"></div>
+      <div class="tb-group tb-progress" id="readProgress"></div>
+    </header>
+
+    <!-- 阅读区 -->
+    <div id="reader">
+      <div id="content"></div>
+      <div id="chapterFoot">
+        <button id="btnPrev" class="nav-btn">← 上一章</button>
+        <span id="chapterFootLabel"></span>
+        <button id="btnNext" class="nav-btn">下一章 →</button>
+      </div>
+    </div>
+
+    <!-- ============ 底部播放器 ============ -->
+    <footer id="player">
+      <button id="btnPlay" class="play-btn" title="播放 / 暂停（空格）" aria-label="播放或暂停">
+        <span id="playIcon">▶</span>
+      </button>
+
+      <div class="pl-sent" role="group" aria-label="单句点读">
+        <button class="icon-btn sm" id="btnPrevSent" title="上一句（←）" aria-label="上一句">⟨</button>
+        <button class="icon-btn sm" id="btnRepeat" title="重复朗读本句（R）" aria-label="重复本句">🔁 本句</button>
+        <button class="icon-btn sm" id="btnNextSent" title="下一句（→）" aria-label="下一句">⟩</button>
+      </div>
+
+      <div class="pl-now">
+        <div class="pl-title" id="nowTitle">未在播放</div>
+        <div class="pl-sub" id="nowSub">单击句子＝只读这一句 · Shift+单击＝从此连读</div>
+      </div>
+
+      <div class="pl-seek">
+        <span class="time" id="tCur">0:00</span>
+        <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="播放进度">
+        <span class="time" id="tDur">0:00</span>
+      </div>
+
+      <div class="pl-speed">
+        <span class="tb-label">语速</span>
+        <input type="range" id="rate" min="0.5" max="2" step="0.01" value="1" aria-label="语速">
+        <output id="rateVal">1.00×</output>
+        <button class="icon-btn sm" id="btnRateReset" title="恢复 1.00×">⟲</button>
+      </div>
+
+      <audio id="audio" preload="metadata"></audio>
+    </footer>
+
+  </main>
+</div>
+
+<div id="overlay"></div>
+
+<script src="data/lexicon.js"></script>
+<script src="data/book.js"></script>
+<script src="data/illust.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
