@@ -140,6 +140,22 @@ button,input,select{font-family:inherit}
   font-size:14px;color:var(--ink-faint);margin-top:6px;letter-spacing:2px;
 }
 
+/* 译注：正文下方的译者注，独立于中文译文 */
+.chapter-note{
+  margin:30px 0 0;padding:16px 20px;
+  background:#fbf7ec;
+  border:1px solid var(--accent-soft);
+  border-left:4px solid var(--accent);
+  border-radius:10px;
+}
+.chapter-note .cn-label{
+  font-size:13px;font-weight:700;letter-spacing:3px;
+  color:var(--accent-deep);margin:0 0 8px;
+}
+.chapter-note .cn-body{
+  font-size:15px;line-height:1.9;color:var(--ink-soft);
+}
+
 /* 圣埃克苏佩里原版插画 — 复用 russian 站资源，无黑底 */
 .illust{
   margin:20px auto;text-align:center;display:block;max-width:100%;

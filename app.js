@@ -18,7 +18,7 @@
   /* =======================================================
      章节数据按需加载
      ======================================================= */
-  const CH_VER = "7";        // 章节数据版本号：正文变动时 +1，用于击穿缓存（index.html 的预载需同步）
+  const CH_VER = "8";        // 章节数据版本号：正文变动时 +1，用于击穿缓存（index.html 的预载需同步）
   const CH = {};             // ci -> 章数据 {id,title_it,title_zh,paras,lex}
   const PID = {};            // pid -> {ci, pi, para}  ← O(1) 反查，替代原先每帧全表扫描
   const IDX = {};            // 章 id -> ci
@@ -414,6 +414,21 @@
     });
     div.appendChild(frag);
     elContent.appendChild(div);
+
+    // 译注（译者注）：若有则渲染在正文下方，独立于中文译文
+    if (ch.note) {
+      const note = document.createElement("div");
+      note.className = "chapter-note";
+      const nt = document.createElement("div");
+      nt.className = "cn-label";
+      nt.textContent = "译注";
+      const nb = document.createElement("div");
+      nb.className = "cn-body";
+      nb.textContent = ch.note;
+      note.appendChild(nt);
+      note.appendChild(nb);
+      elContent.appendChild(note);
+    }
 
     // 重渲染后恢复播放标记
     if (curPid) {
