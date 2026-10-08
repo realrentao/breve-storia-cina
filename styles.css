@@ -121,6 +121,25 @@ button,input,select{font-family:inherit}
 }
 .chapter-head .ch-zh{font-size:15px;color:var(--ink-faint);margin-top:7px;letter-spacing:1px}
 
+/* 篇/Part 标题横幅：置于章节标题之上，标识「第 N 部 · 总标题」 */
+.part-banner{
+  margin:0 0 22px;padding:16px 22px;
+  background:linear-gradient(180deg,var(--accent-soft),#fff);
+  border:1px solid var(--accent-soft);
+  border-left:5px solid var(--accent);
+  border-radius:10px;
+}
+.part-banner .pb-kicker{
+  font-size:13px;font-weight:700;letter-spacing:3px;
+  color:var(--accent-deep);text-transform:uppercase;margin:0 0 5px;
+}
+.part-banner .pb-title{
+  font-size:25px;font-weight:700;color:var(--accent-deep);margin:0;line-height:1.2;
+}
+.part-banner .pb-zh{
+  font-size:14px;color:var(--ink-faint);margin-top:6px;letter-spacing:2px;
+}
+
 /* 圣埃克苏佩里原版插画 — 复用 russian 站资源，无黑底 */
 .illust{
   margin:20px auto;text-align:center;display:block;max-width:100%;

@@ -18,7 +18,7 @@
   /* =======================================================
      章节数据按需加载
      ======================================================= */
-  const CH_VER = "1";        // 章节数据版本号：正文变动时 +1，用于击穿缓存（index.html 的预载需同步）
+  const CH_VER = "2";        // 章节数据版本号：正文变动时 +1，用于击穿缓存（index.html 的预载需同步）
   const CH = {};             // ci -> 章数据 {id,title_it,title_zh,paras,lex}
   const PID = {};            // pid -> {ci, pi, para}  ← O(1) 反查，替代原先每帧全表扫描
   const IDX = {};            // 章 id -> ci
@@ -292,6 +292,27 @@
       const fig = illustImg(headerIll.file, ch.title_it + " 原版插画", true);
       fig.classList.add("illust-header");
       head.appendChild(fig);
+    }
+
+    // 篇/Part 标题横幅：若本章是某「部」开篇，渲染 "PARTE N · 总标题" 于章节标题之上
+    if (ch.part_it) {
+      const pb = document.createElement("div");
+      pb.className = "part-banner";
+      const k = document.createElement("div");
+      k.className = "pb-kicker";
+      k.textContent = ch.part_it;
+      const t = document.createElement("div");
+      t.className = "pb-title";
+      t.textContent = ch.part_title_it || "";
+      pb.appendChild(k);
+      pb.appendChild(t);
+      if (ch.part_title_zh) {
+        const z = document.createElement("div");
+        z.className = "pb-zh";
+        z.textContent = ch.part_title_zh;
+        pb.appendChild(z);
+      }
+      elContent.appendChild(pb);
     }
 
     elContent.appendChild(head);
