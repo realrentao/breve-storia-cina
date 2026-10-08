@@ -1,14 +1,74 @@
-/* ===== Breve storia della Cina · 意中双语朗读阅读器 ===== */
+/* ===== Breve storia della Cina · 意中双语朗读阅读器 =====
+   数据按需加载版：
+     data/book-meta.js  —— 首屏同步加载：meta + 章节目录（无正文），约 18KB
+     data/ch/chNN.js    —— 每章正文 + 该章「词 -> IPA」子集，翻到该章时才注入
+   相比旧的「book.js 814KB + lexicon.js 265KB 同步加载」，首屏数据量降约 98%。
+*/
 (function () {
   "use strict";
 
   const BOOK = window.__BOOK__;
-  const LEX = window.__LEX__ || {};
   const ILLUST = window.__ILLUST__ || [];
   if (!BOOK) {
     document.getElementById("content").innerHTML =
-      '<p style="color:#c00">数据未加载：请确认 data/book.js 存在。</p>';
+      '<p style="color:#c00">数据未加载：请确认 data/book-meta.js 存在。</p>';
     return;
+  }
+
+  /* =======================================================
+     章节数据按需加载
+     ======================================================= */
+  const CH_VER = "1";        // 章节数据版本号：正文变动时 +1，用于击穿缓存（index.html 的预载需同步）
+  const CH = {};             // ci -> 章数据 {id,title_it,title_zh,paras,lex}
+  const PID = {};            // pid -> {ci, pi, para}  ← O(1) 反查，替代原先每帧全表扫描
+  const IDX = {};            // 章 id -> ci
+  BOOK.chapters.forEach((c, i) => { IDX[c.id] = i; });
+
+  const _waiters = {};
+  const _inflight = {};
+  const _prefetched = {};
+
+  // 章节脚本回调（data/ch/chNN.js 内容为 window.__CH__("ch00", {...})）
+  window.__CH__ = function (id, data) {
+    const ci = IDX[id];
+    if (ci == null || !data) return;
+    CH[ci] = data;
+    const ps = data.paras || [];
+    for (let pi = 0; pi < ps.length; pi++) {
+      PID[ps[pi].id] = { ci: ci, pi: pi, para: ps[pi] };
+    }
+    _inflight[ci] = false;
+    const ws = _waiters[ci];
+    delete _waiters[ci];
+    if (ws) for (let k = 0; k < ws.length; k++) { try { ws[k](data); } catch (e) { /* noop */ } }
+  };
+
+  function loadChapter(ci, cb) {
+    const cached = CH[ci];
+    if (cached) { if (cb) cb(cached); return; }
+    if (cb) (_waiters[ci] = _waiters[ci] || []).push(cb);
+    if (_inflight[ci]) return;
+    _inflight[ci] = true;
+    const s = document.createElement("script");
+    s.src = "data/ch/" + BOOK.chapters[ci].id + ".js?v=" + CH_VER;
+    s.async = true;
+    s.onerror = function () {
+      _inflight[ci] = false;
+      const ws = _waiters[ci];
+      delete _waiters[ci];
+      if (ws) for (let k = 0; k < ws.length; k++) { try { ws[k](null); } catch (e) { /* noop */ } }
+    };
+    document.head.appendChild(s);
+  }
+
+  // 空闲时预取相邻章，翻页/连播时零等待
+  function prefetchChapter(ci, delay) {
+    if (ci < 0 || ci >= BOOK.chapters.length) return;
+    if (CH[ci] || _prefetched[ci] || _inflight[ci]) return;
+    _prefetched[ci] = true;
+    const go = () => loadChapter(ci);
+    const idle = () => { if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 2500 }); else go(); };
+    if (delay) setTimeout(idle, delay); else idle();
   }
 
   // Per-chapter illustration tables. Each entry: {file, position: "header"|"inline", after_sentence, pdf_page}
@@ -55,7 +115,7 @@
   const savePrefs = () => localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
 
   /* ---------- 播放状态 ---------- */
-  let curChapter = Math.min(prefs.ch || 0, BOOK.chapters.length - 1);
+  let curChapter = Math.max(0, Math.min(prefs.ch || 0, BOOK.chapters.length - 1));
   let curPid = null;      // 当前音频段落 id
   let curSi = null;       // 单句点读时的句索引
   let stopAt = null;      // 毫秒；到点停止
@@ -69,12 +129,15 @@
 
   // 缓存高频 DOM
   const elSeek = $("seek"), elTCur = $("tCur"), elTDur = $("tDur");
+  const elReader = $("reader"), elContent = $("content");
 
   /* =======================================================
-     分词 + 音标渲染（意语音标：逐词查 lexicon.js）
+     分词 + 音标渲染（意语音标：逐词查本章词表）
      ======================================================= */
   // 把「前缀标点 + 意语词（含重音字母）+ 后缀标点」拆开，词的下方挂 IPA
   const PART_RE = /^([^À-Ýà-ÿA-Za-z0-9]*)([À-Ýà-ÿA-Za-z]+(?:-[À-Ýà-ÿA-Za-z]+)*|\d+)?([\s\S]*)$/;
+
+  let curLex = {};          // 当前章的「词 -> IPA」表（随章切换）
 
   function renderIt(text) {
     const frag = document.createDocumentFragment();
@@ -99,7 +162,7 @@
       wd.textContent = (pre || "") + word + (post || "");
       const ph = document.createElement("span");
       ph.className = "ph";
-      ph.textContent = LEX[word.toLowerCase()] || "";
+      ph.textContent = curLex[word.toLowerCase()] || "";
       tok.appendChild(wd);
       tok.appendChild(ph);
       frag.appendChild(tok);
@@ -108,22 +171,36 @@
   }
 
   /* =======================================================
-     渲染章节导航
+     渲染章节导航（事件委托，DOM 操作从 123×3 降到 2 次批量）
      ======================================================= */
   function renderNav() {
     const nav = $("chapterNav");
-    nav.innerHTML = "";
-    BOOK.chapters.forEach((ch, i) => {
-      const a = document.createElement("a");
-      a.innerHTML =
-        '<span class="cn-it"></span><span class="cn-zh"></span>';
-      a.querySelector(".cn-it").textContent = ch.title_it;
-      a.querySelector(".cn-zh").textContent = ch.title_zh;
-      a.onclick = () => { openChapter(i); closeSidebarOnMobile(); };
-      nav.appendChild(a);
+    const list = BOOK.chapters;
+    let html = "";
+    for (let i = 0; i < list.length; i++) html += '<a data-i="' + i + '"><span class="cn-it"></span><span class="cn-zh"></span></a>';
+    nav.innerHTML = html;
+    const as = nav.children;
+    for (let i = 0; i < list.length; i++) {
+      as[i].firstChild.textContent = list[i].title_it;
+      as[i].lastChild.textContent = list[i].title_zh;
+    }
+    nav.addEventListener("click", (e) => {
+      const a = e.target.closest ? e.target.closest("a[data-i]") : null;
+      if (!a) return;
+      openChapter(+a.dataset.i);
+      closeSidebarOnMobile();
     });
-    $("bookAuthor").textContent =
-      BOOK.meta.author_it + " · " + BOOK.meta.author_zh;
+    // 鼠标在目录上停留 140ms 即预取该章，点击时基本已是瞬时
+    let navHoverT = 0;
+    nav.addEventListener("pointerover", (e) => {
+      const a = e.target.closest ? e.target.closest("a[data-i]") : null;
+      if (!a) return;
+      clearTimeout(navHoverT);
+      const i = +a.dataset.i;
+      navHoverT = setTimeout(() => prefetchChapter(i), 140);
+    });
+    nav.addEventListener("pointerout", () => clearTimeout(navHoverT));
+    $("bookAuthor").textContent = BOOK.meta.author_it + " · " + BOOK.meta.author_zh;
     const m = BOOK.meta;
     $("sideStats").innerHTML =
       `全书 ${m.n_chapters} 章 · ${m.n_paras} 段 · ${m.n_sents} 句<br>` +
@@ -133,23 +210,69 @@
       `<b>←/→</b> 上一句 / 下一句 · <b>R</b> 重复本句 · <b>空格</b> 播放暂停`;
   }
 
+  let navOn = -1;
   function markNav() {
-    [...$("chapterNav").children].forEach((a, i) =>
-      a.classList.toggle("on", i === curChapter)
-    );
+    const as = $("chapterNav").children;
+    if (navOn >= 0 && as[navOn]) as[navOn].classList.remove("on");
+    if (as[curChapter]) as[curChapter].classList.add("on");
+    navOn = curChapter;
   }
 
   /* =======================================================
      渲染正文
      ======================================================= */
-  function openChapter(i, keepScroll) {
-    curChapter = Math.max(0, Math.min(i, BOOK.chapters.length - 1));
-    prefs.ch = curChapter;
+  let renderSeq = 0;        // 切章令牌：异步加载回来时若已切走则丢弃
+
+  function openChapter(i, keepScroll, onRendered) {
+    i = Math.max(0, Math.min(i, BOOK.chapters.length - 1));
+    curChapter = i;
+    prefs.ch = i;
     savePrefs();
-    const ch = BOOK.chapters[curChapter];
-    const box = $("content");
+    markNav();
+    updateChapterMeta(i);
+    if (!keepScroll) elReader.scrollTop = 0;
+
+    const seq = ++renderSeq;
+    const cached = CH[i];
+    if (cached) {
+      renderChapter(i, cached);
+      if (onRendered) onRendered(cached);
+    } else {
+      showChapterLoading(i);
+      loadChapter(i, (data) => {
+        if (seq !== renderSeq) return;      // 期间已切到别章，丢弃
+        if (!data) {
+          elContent.textContent = "本章数据加载失败：data/ch/" + BOOK.chapters[i].id + ".js";
+          return;
+        }
+        renderChapter(i, data);
+        if (onRendered) onRendered(data);
+      });
+    }
+    prefetchChapter(i + 1, 400);   // 稍作延后，先让首屏/当前章吃满带宽
+    if (i > 0) prefetchChapter(i - 1, 1200);
+  }
+
+  function updateChapterMeta(i) {
+    const list = BOOK.chapters;
+    $("btnPrev").disabled = i === 0;
+    $("btnNext").disabled = i === list.length - 1;
+    $("chapterFootLabel").textContent = list[i].title_it + " · " + list[i].title_zh;
+    $("readProgress").textContent = `第 ${i + 1} / ${list.length} 章`;
+  }
+
+  function showChapterLoading(i) {
+    elContent.textContent = "";
+    const d = document.createElement("div");
+    d.className = "ch-loading";
+    d.textContent = "正在载入 …";
+    elContent.appendChild(d);
+  }
+
+  function renderChapter(i, ch) {
+    curLex = ch.lex || {};
     activeEl = null;          // 旧节点已随重渲染销毁
-    box.innerHTML = "";
+    elContent.textContent = "";
 
     const head = document.createElement("div");
     head.className = "chapter-head";
@@ -163,7 +286,7 @@
     head.appendChild(sub);
 
     // Header illustration for this chapter (position == "header")
-    const chIll = illByCh[curChapter] || [];
+    const chIll = illByCh[i] || [];
     const headerIll = chIll.find((x) => x.position === "header");
     if (headerIll) {
       const fig = illustImg(headerIll.file, ch.title_it + " 原版插画", true);
@@ -171,7 +294,7 @@
       head.appendChild(fig);
     }
 
-    box.appendChild(head);
+    elContent.appendChild(head);
 
     // For inline illustrations, place by per-chapter sentence index
     const inlineIlls = chIll.filter((x) => x.position === "inline");
@@ -196,7 +319,7 @@
     const btn = document.createElement("button");
     btn.className = "para-play";
     btn.textContent = "▶ 朗读本章";
-    btn.onclick = (e) => { e.stopPropagation(); playChapter(curChapter); };
+    btn.onclick = (e) => { e.stopPropagation(); playChapter(i); };
     const idx = document.createElement("span");
     idx.className = "para-idx";
     const totalSents = ch.paras.reduce((a, p) => a + p.sents.length, 0);
@@ -205,6 +328,8 @@
     bar.appendChild(idx);
     div.appendChild(bar);
 
+    // 用 DocumentFragment 批量拼装，只触发一次布局
+    const frag = document.createDocumentFragment();
     ch.paras.forEach((p, pi) => {
       p.sents.forEach((s, si) => {
         const sd = document.createElement("div");
@@ -252,7 +377,7 @@
           sd.classList.add("no-audio");
         }
 
-        div.appendChild(sd);
+        frag.appendChild(sd);
 
         // After this sentence, check if any inline illustration should be placed here
         runningSentIdx += 1;
@@ -261,22 +386,13 @@
           illustList.forEach((it) => {
             const fig = illustImg(it.file, ch.title_it + " 插画", false);
             fig.classList.add("illust-inline");
-            div.appendChild(fig);
+            frag.appendChild(fig);
           });
         }
       });
     });
-
-    box.appendChild(div);
-
-    markNav();
-    $("btnPrev").disabled = curChapter === 0;
-    $("btnNext").disabled = curChapter === BOOK.chapters.length - 1;
-    $("chapterFootLabel").textContent =
-      `${ch.title_it} · ${ch.title_zh}`;
-    $("readProgress").textContent =
-      `第 ${curChapter + 1} / ${BOOK.chapters.length} 章`;
-    if (!keepScroll) $("reader").scrollTop = 0;
+    div.appendChild(frag);
+    elContent.appendChild(div);
 
     // 重渲染后恢复播放标记
     if (curPid) {
@@ -292,14 +408,12 @@
      播放控制
      ======================================================= */
   function paraById(pid) {
-    for (const ch of BOOK.chapters)
-      for (const p of ch.paras) if (p.id === pid) return p;
-    return null;
+    const e = PID[pid];
+    return e ? e.para : null;
   }
   function chapterIdxOfPara(pid) {
-    for (let i = 0; i < BOOK.chapters.length; i++)
-      if (BOOK.chapters[i].paras.some((p) => p.id === pid)) return i;
-    return -1;
+    const e = PID[pid];
+    return e ? e.ci : -1;
   }
 
   /* ---------- 打断机制 ----------
@@ -400,11 +514,11 @@
 
   /* 同章内当前段的下一音频段 id（用于预加载） */
   function nextParaInChapter(pid) {
-    const ci = chapterIdxOfPara(pid);
-    if (ci < 0) return null;
-    const ch = BOOK.chapters[ci];
-    const pi = ch.paras.findIndex((p) => p.id === pid);
-    for (let k = pi + 1; k < ch.paras.length; k++)
+    const e = PID[pid];
+    if (!e) return null;
+    const ch = CH[e.ci];
+    if (!ch) return null;
+    for (let k = e.pi + 1; k < ch.paras.length; k++)
       if (ch.paras[k].audio) return ch.paras[k].id;
     return null;
   }
@@ -419,24 +533,23 @@
 
   /* 朗读整个章节：从本章第一段起连读，段尾自动续下一段直到本章结束 */
   function playChapter(ci) {
-    const ch = BOOK.chapters[ci];
-    if (!ch) return;
-    const first = ch.paras.find((p) => p.audio);
-    if (!first) return;
-    chapterChain = ci;            // 标记：ended 时自动续读本章下一段
-    wholeChapter = true;
-    playParagraph(first.id, 0, true);
+    loadChapter(ci, (ch) => {
+      if (!ch || ci !== curChapter) return;
+      const first = ch.paras.find((p) => p.audio);
+      if (!first) return;
+      chapterChain = ci;            // 标记：ended 时自动续读本章下一段
+      wholeChapter = true;
+      playParagraph(first.id, 0, true);
+    });
   }
 
   /* 计算某 pid+段内句序号 在章内的全局句序号，用于「本章第 X 句」文案 */
   function chapterSentInfo(pid, siInPara) {
-    const ci = chapterIdxOfPara(pid);
-    const ch = BOOK.chapters[ci];
+    const e = PID[pid];
+    const ch = e ? CH[e.ci] : null;
+    if (!ch) return { globalIdx: 0, total: 0 };
     let acc = 0;
-    for (const p of ch.paras) {
-      if (p.id === pid) break;
-      acc += p.sents.length;
-    }
+    for (let k = 0; k < e.pi; k++) acc += ch.paras[k].sents.length;
     const total = ch.paras.reduce((a, p) => a + p.sents.length, 0);
     return { globalIdx: acc + (siInPara != null ? siInPara : 0) + 1, total };
   }
@@ -478,8 +591,8 @@
     if (curPid && curSi !== null) return playSentence(curPid, curSi, false);
     if (activeEl) return playSentence(activeEl.dataset.pid, +activeEl.dataset.si, false);
     // 都没有 → 读本章第一句
-    const ch = BOOK.chapters[curChapter];
-    const p = ch.paras.find((x) => x.audio);
+    const ch = CH[curChapter];
+    const p = ch && ch.paras.find((x) => x.audio);
     if (p) playSentence(p.id, 0, false);
   }
 
@@ -489,8 +602,8 @@
     if (pid == null || si == null) {
       if (activeEl) { pid = activeEl.dataset.pid; si = +activeEl.dataset.si; }
       else {
-        const ch0 = BOOK.chapters[curChapter];
-        const p0 = ch0.paras.find((x) => x.audio);
+        const ch0 = CH[curChapter];
+        const p0 = ch0 && ch0.paras.find((x) => x.audio);
         if (!p0) return;
         pid = p0.id;
         si = delta > 0 ? -1 : 0;
@@ -498,8 +611,9 @@
     }
     const ci = chapterIdxOfPara(pid);
     if (ci < 0) return;
-    const ch = BOOK.chapters[ci];
-    let pi = ch.paras.findIndex((p) => p.id === pid);
+    const ch = CH[ci];
+    if (!ch) return;
+    let pi = PID[pid].pi;
     let t = si + delta;
     let guard = 0;
     while (guard++ < 5000) {
@@ -530,7 +644,7 @@
   function scrollToSent(pid, si) {
     const el = document.querySelector(`.sent[data-pid="${pid}"][data-si="${si}"]`);
     if (!el) return;
-    const r = $("reader").getBoundingClientRect();
+    const r = elReader.getBoundingClientRect();
     const b = el.getBoundingClientRect();
     if (b.top < r.top + 60 || b.bottom > r.bottom - 60)
       el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -551,11 +665,13 @@
     if (el) el.classList.add("solo");
   }
 
+  let paraEl = null;   // 当前章的 .para 容器（整章合并后仅一个）
   function updateNow(pid) {
-    const ci = chapterIdxOfPara(pid);
-    const ch = BOOK.chapters[ci];
-    const p = paraById(pid);
-    const pi = ch ? ch.paras.findIndex((x) => x.id === pid) : -1;
+    const e = PID[pid];
+    const ci = e ? e.ci : -1;
+    const ch = e ? CH[ci] : null;
+    const p = e ? e.para : null;
+    const pi = e ? e.pi : -1;
     $("nowTitle").textContent = ch ? `${ch.title_it} · ${ch.title_zh}` : "";
     let sub;
     if (wholeChapter && chapterChain >= 0) {
@@ -575,17 +691,17 @@
     );
   }
 
-  /* 段落播完 → 自动接下一段 / 下一章 */
+  /* 段落播完 → 自动接下一段 / 下一章（跨章用 meta.first_pid，无需预载整本） */
   function nextParagraph() {
-    const ci = chapterIdxOfPara(curPid);
-    if (ci < 0) return null;
-    const ch = BOOK.chapters[ci];
-    const pi = ch.paras.findIndex((p) => p.id === curPid);
-    for (let k = pi + 1; k < ch.paras.length; k++)
-      if (ch.paras[k].audio) return { ci, pid: ch.paras[k].id };
-    for (let c = ci + 1; c < BOOK.chapters.length; c++)
-      for (const p of BOOK.chapters[c].paras)
-        if (p.audio) return { ci: c, pid: p.id };
+    const e = PID[curPid];
+    if (!e) return null;
+    const ch = CH[e.ci];
+    if (ch) {
+      for (let k = e.pi + 1; k < ch.paras.length; k++)
+        if (ch.paras[k].audio) return { ci: e.ci, pid: ch.paras[k].id };
+    }
+    for (let c = e.ci + 1; c < BOOK.chapters.length; c++)
+      if (BOOK.chapters[c].first_pid) return { ci: c, pid: BOOK.chapters[c].first_pid };
     return null;
   }
 
@@ -602,9 +718,9 @@
     if (!prefs.auto && chapterChain < 0) { setPlayIcon(false); return; }
     // 朗读本章：自动续播本章的下一段（同一章内跨段连读，无缝衔接）
     if (chapterChain >= 0 && chapterChain === curChapter) {
-      const ch = BOOK.chapters[curChapter];
-      let pi = ch.paras.findIndex((p) => p.id === curPid);
-      while (pi + 1 < ch.paras.length) {
+      const ch = CH[curChapter];
+      let pi = ch ? ch.paras.findIndex((p) => p.id === curPid) : -1;
+      while (ch && pi + 1 < ch.paras.length) {
         pi++;
         if (ch.paras[pi].audio) {
           // 不 reset playToken/wholeChapter，整章视为一个段落
@@ -622,7 +738,7 @@
     const nx = nextParagraph();
     if (!nx) { setPlayIcon(false); return; }
     if (nx.ci !== curChapter) openChapter(nx.ci);
-    playParagraph(nx.pid, 0);
+    loadChapter(nx.ci, () => playParagraph(nx.pid, 0));
   });
 
   audio.addEventListener("play", () => setPlayIcon(true));
@@ -685,7 +801,7 @@
     el.classList.add("active");
     if (wholeChapter) updateWholeSub(idx);
     if (prefs.follow) {
-      const r = $("reader").getBoundingClientRect();
+      const r = elReader.getBoundingClientRect();
       const b = el.getBoundingClientRect();
       if (b.top < r.top + 60 || b.bottom > r.bottom - 60) {
         el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -696,9 +812,7 @@
   function updateWholeSub(siInPara) {
     const info = chapterSentInfo(curPid, siInPara);
     $("nowSub").textContent = `朗读本章 · 本章第 ${info.globalIdx} / ${info.total} 句`;
-    document.querySelectorAll(".para").forEach((d) =>
-      d.classList.add("playing")
-    );
+    if (paraEl) paraEl.classList.add("playing");
   }
   requestAnimationFrame(tick);
 
@@ -708,8 +822,8 @@
   $("btnPlay").onclick = () => {
     if (audio.paused) {
       if (!curPid) {
-        const ch = BOOK.chapters[curChapter];
-        const p = ch.paras.find((x) => x.audio);
+        const ch = CH[curChapter];
+        const p = ch && ch.paras.find((x) => x.audio);
         if (p) playParagraph(p.id, 0);
         return;
       }
@@ -842,5 +956,5 @@
   $("chkAuto").checked = prefs.auto;
   $("chkLoop").checked = prefs.loop;
   if (window.innerWidth <= 900) $("sidebar").classList.add("hidden");
-  openChapter(curChapter);
+  openChapter(curChapter, false, () => { paraEl = elContent.querySelector(".para-merged"); });
 })();

@@ -107,6 +107,13 @@ button,input,select{font-family:inherit}
   max-width:960px;margin:0 auto;padding:34px 30px 20px;
 }
 
+/* 按需加载中的占位（延迟 180ms 才出现，避免本地瞬时加载时闪烁） */
+.ch-loading{
+  padding:40px 0;text-align:center;color:var(--ink-faint);font-size:14px;
+  letter-spacing:2px;opacity:0;animation:chLoadIn .25s ease .18s forwards;
+}
+@keyframes chLoadIn{to{opacity:1}}
+
 .chapter-head{margin:0 0 30px;padding-bottom:16px;border-bottom:2px solid var(--accent-soft)}
 .chapter-head .ch-it{
   font-size:31px;font-weight:700;color:var(--accent-deep);margin:0;
